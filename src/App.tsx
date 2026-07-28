@@ -1,703 +1,849 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
-const metrics = [
-  { value: "<1", unit: "mm", label: "placement error" },
-  { value: "5×", unit: "", label: "faster registration" },
-  { value: "33–37", unit: "FPS", label: "edge inference" },
-];
-
-type ProjectMedia = {
+type Media = {
   src: string;
   alt: string;
+  label?: string;
 };
 
-type ProjectVideo = {
+type Video = {
   id: string;
-  href: string;
   title: string;
   duration: string;
 };
 
-type Project = {
-  number: string;
-  title: string;
-  eyebrow: string;
-  result: string;
-  resultLabel: string;
-  description: string;
-  tags: string[];
-  media: ProjectMedia[];
-  videos?: ProjectVideo[];
-  link?: {
-    href: string;
-    label: string;
-  };
+const pipelineStages = [
+  {
+    index: "01",
+    short: "Scan",
+    eyebrow: "Raw measured geometry",
+    title: "Capture the physical part.",
+    body: "The cell starts with a real scan: occlusion, surface noise and steel that never arrives exactly where the model expects it.",
+    image: "/images/work/pointcloud-unaligned-beam.jpg",
+  },
+  {
+    index: "02",
+    short: "Identify",
+    eyebrow: "Part identification",
+    title: "Find the right component.",
+    body: "I isolate the candidate geometry, reject outliers and match the measured cluster to the correct production CAD.",
+    image: "/images/work/beam-matching.jpg",
+  },
+  {
+    index: "03",
+    short: "Register",
+    eyebrow: "Staged registration",
+    title: "Bring scan and CAD together.",
+    body: "Raycast-visible CAD, coarse alignment and staged ICP turn noisy measurements into a pose the robot can actually use.",
+    image: "/images/work/scan-to-cad-beam-match.png",
+  },
+  {
+    index: "04",
+    short: "Inspect",
+    eyebrow: "Fit verification",
+    title: "Measure what changed.",
+    body: "The pipeline checks fit, deviations and placement before any correction reaches the production cell.",
+    image: "/images/work/fit-inspection.png",
+  },
+  {
+    index: "05",
+    short: "Execute",
+    eyebrow: "ABB correction",
+    title: "Send verified motion to the cell.",
+    body: "Measured correction becomes collision-aware assembly and welding motion on real ABB hardware.",
+    image: "/images/work/robot-welding.jpg",
+  },
+];
+
+const projectMedia: Record<string, Media[]> = {
+  assembly: [
+    {
+      src: "/images/work/assembly-visualizer.png",
+      alt: "Geometry-aware assembly visualizer",
+      label: "Assembly planning",
+    },
+    {
+      src: "/images/work/me-abb-pendant.jpg",
+      alt: "Dinmukhamet programming an ABB industrial robot",
+      label: "Real hardware",
+    },
+    {
+      src: "/images/work/robot-welding.jpg",
+      alt: "ABB robot welding a steel assembly",
+      label: "Execution",
+    },
+  ],
+  scanner: [
+    {
+      src: "/images/work/virtual-scanner-raycast.png",
+      alt: "Virtual point-cloud scanner raycasting an STL model",
+      label: "36 viewpoints",
+    },
+    {
+      src: "/images/work/open3d-eiffel-pointcloud.png",
+      alt: "Eiffel Tower point cloud rendered in Open3D",
+      label: "Occlusion-aware output",
+    },
+    {
+      src: "/images/work/scanner-stl-select.png",
+      alt: "STL selection interface for the virtual scanner",
+      label: "Open-source tool",
+    },
+  ],
+  edge: [
+    {
+      src: "/images/work/openvino-benchmark.png",
+      alt: "OpenVINO model performance benchmark",
+      label: "20 → 37 FPS",
+    },
+    {
+      src: "/images/work/experimental-setups.jpg",
+      alt: "Robotics and computer-vision experimental setup",
+      label: "Edge experiments",
+    },
+  ],
 };
 
-const projects: Project[] = [
+const videos: Video[] = [
   {
-    number: "01",
-    title: "Production scan-to-CAD perception",
-    eyebrow: "Quant Robotics · Industrial perception",
-    result: "3 mm → <1 mm",
-    resultLabel: "ABB placement error",
-    description:
-      "I own the production 3D scanning, registration, and inspection stack behind an ABB robotic welding cell. I rebuilt the Open3D pipeline with scanner-visible CAD raycasting, staged ICP, part identification, and fit inspection.",
-    tags: ["Open3D", "ICP", "Raycasting", "ABB RAPID", "ROS 2"],
-    media: [
-      { src: "/images/work/scan-to-cad-beam-match.png", alt: "Measured beam point cloud aligned to its CAD model" },
-      { src: "/images/work/me-gocator-calibration.jpg", alt: "Dinmukhamet calibrating a Gocator scanner on an ABB cell" },
-      { src: "/images/work/fit-inspection.png", alt: "Measured fit and deviation inspection result" },
-    ],
+    id: "JUHFF74MCJs",
+    title: "Jackal UGV — dynamic obstacle avoidance with NMPC",
+    duration: "01:03",
   },
   {
-    number: "02",
-    title: "Assembly planning for ABB welding cells",
-    eyebrow: "Quant Robotics · Production automation",
-    result: "160 → 30–55 s",
-    resultLabel: "planning cycle",
-    description:
-      "I built geometry-aware install-and-weld planning, collision-safe retreat trajectories, and a robot-to-robot handoff in ABB RAPID. The IRB6700 sends measured part correction over a socket; the IRB2600 welds to it.",
-    tags: ["ROS 2", "MoveIt2", "Motion planning", "ABB RAPID", "PyVista"],
-    media: [
-      { src: "/images/work/assembly-visualizer.png", alt: "3D assembly planning visualizer" },
-      { src: "/images/work/me-abb-pendant.jpg", alt: "Dinmukhamet working with an ABB teach pendant" },
-      { src: "/images/work/robot-welding.jpg", alt: "ABB robot welding a steel assembly" },
-    ],
+    id: "xvdzt8DPEdo",
+    title: "3D human detection with YOLO and an RGB-D camera",
+    duration: "00:07",
   },
   {
-    number: "03",
-    title: "Human-aware NMPC",
-    eyebrow: "Nazarbayev University · Motion control",
-    result: "50–70 ms",
-    resultLabel: "optimization cycle",
-    description:
-      "A custom nonlinear MPC local controller for a Clearpath Jackal in Nav2, with skid-steer dynamics and human-aware velocity adaptation driven by YOLOv8-nano 3D person detection at 10 Hz.",
-    tags: ["ACADOS", "Nav2", "ROS 2", "YOLOv8", "Gazebo"],
-    videos: [
-      {
-        id: "JUHFF74MCJs",
-        href: "https://www.youtube.com/watch?v=JUHFF74MCJs",
-        title: "Jackal UGV — dynamic obstacle avoidance with NMPC",
-        duration: "01:03",
-      },
-      {
-        id: "xvdzt8DPEdo",
-        href: "https://www.youtube.com/watch?v=xvdzt8DPEdo",
-        title: "3D human detection with YOLO, ROS, and an RGB-D camera",
-        duration: "00:07",
-      },
-      {
-        id: "l8Rhfs3ggD8",
-        href: "https://www.youtube.com/watch?v=l8Rhfs3ggD8",
-        title: "Human-following NMPC controller",
-        duration: "01:01",
-      },
-    ],
-    media: [],
-  },
-  {
-    number: "04",
-    title: "Virtual point-cloud scanner",
-    eyebrow: "Open source · Synthetic perception",
-    result: "36",
-    resultLabel: "raycast viewpoints",
-    description:
-      "A synthetic industrial scanner that captures STL models from 36 viewpoints through Open3D raycasting and a pinhole model, preserving visibility and occlusion that naive mesh sampling misses.",
-    tags: ["Open3D", "Raycasting", "Python", "Point clouds"],
-    link: { href: "https://github.com/dinmukhamet-murat/virtual-pointcloud-scanner", label: "View repository" },
-    media: [
-      { src: "/images/work/virtual-scanner-raycast.png", alt: "Synthetic point cloud captured by raycasting an STL model" },
-      { src: "/images/work/open3d-eiffel-pointcloud.png", alt: "Eiffel Tower point cloud in Open3D" },
-      { src: "/images/work/scanner-stl-select.png", alt: "STL selection interface for the scanner" },
-    ],
-  },
-  {
-    number: "05",
-    title: "ROS MoveIt pick-and-place",
-    eyebrow: "Personal · In development",
-    result: "UR-5",
-    resultLabel: "manipulator platform",
-    description:
-      "A UR-5 picks boxes from a conveyor and arranges them into target shapes—a cube, tower, or pyramid—using ROS 2 Jazzy and MoveIt2.",
-    tags: ["ROS 2 Jazzy", "MoveIt2", "UR-5", "Manipulation"],
-    media: [
-      { src: "/images/work/pnp-sim-scene.png", alt: "UR5 beside a conveyor and stacking table in RViz" },
-      { src: "/images/work/pnp-pick.png", alt: "UR5 picking a box from the conveyor" },
-      { src: "/images/work/pnp-carry-stack.png", alt: "UR5 carrying a box toward a stack" },
-    ],
-  },
-  {
-    number: "06",
-    title: "Edge CV & robotics experiments",
-    eyebrow: "Research · Engineering archive",
-    result: "20 → 37 FPS",
-    resultLabel: "edge throughput",
-    description:
-      "A collection of practical experiments: YOLO nano optimization across ONNX and OpenVINO, NMPC control of a UR-5, and Nav2/TurtleBot3 navigation in simulation.",
-    tags: ["YOLO", "OpenVINO", "ONNX", "NMPC", "Nav2"],
-    videos: [
-      {
-        id: "dfHD99SgBPc",
-        href: "https://www.youtube.com/watch?v=dfHD99SgBPc",
-        title: "UR-5 NMPC simulation",
-        duration: "00:46",
-      },
-      {
-        id: "PLBOdEnDqqc",
-        href: "https://www.youtube.com/watch?v=PLBOdEnDqqc",
-        title: "TurtleBot3 navigation experiment",
-        duration: "05:40",
-      },
-      {
-        id: "UEdqK3SDNaQ",
-        href: "https://www.youtube.com/shorts/UEdqK3SDNaQ",
-        title: "Snake prototype",
-        duration: "00:39",
-      },
-    ],
-    link: {
-      href: "https://www.youtube.com/watch?v=-SphZAT90ls",
-      label: "OpenVINO benchmark",
-    },
-    media: [
-      { src: "/images/work/openvino-benchmark.png", alt: "OpenVINO model performance benchmark" },
-      { src: "/images/work/experimental-setups.jpg", alt: "Robotics experimental setup" },
-    ],
+    id: "l8Rhfs3ggD8",
+    title: "Human-following NMPC controller",
+    duration: "01:01",
   },
 ];
 
 const experience = [
   {
     period: "2025 — NOW",
-    company: "QUANT ROBOTICS",
+    company: "Quant Robotics",
     role: "Robotics Software Engineer",
-    summary:
-      "Own the production 3D scanning, registration, inspection, and assembly-planning stack for ABB robotic welding cells.",
+    detail:
+      "Production 3D scanning, registration, inspection and assembly planning for ABB robotic welding cells.",
   },
   {
     period: "2024 — 2025",
-    company: "NAZARBAYEV UNIVERSITY",
+    company: "Nazarbayev University",
     role: "Research Assistant",
-    summary:
-      "Built a real-time NMPC local controller for mobile robots and integrated human-aware safety into the ROS 2 navigation loop.",
+    detail:
+      "Real-time NMPC navigation with skid-steer dynamics and human-aware velocity adaptation in ROS 2.",
   },
   {
     period: "2025",
     company: "FOQUS",
     role: "Edge Video Systems Engineer",
-    summary:
-      "Optimized real-time object-detection inference across ONNX and OpenVINO pipelines for edge deployment.",
+    detail:
+      "Object-detection inference optimization across ONNX and OpenVINO for edge deployment.",
   },
 ];
 
-const skillGroups = [
-  {
-    index: "01",
-    title: "3D perception",
-    items: "Open3D · ICP · RANSAC · FPFH · DBSCAN · Raycasting · PyVista",
-  },
-  {
-    index: "02",
-    title: "Robotics",
-    items: "ROS 2 · MoveIt2 · Nav2 · ABB RAPID · Gazebo · RViz · URDF",
-  },
-  {
-    index: "03",
-    title: "Control",
-    items: "MPC / NMPC · ACADOS · Trajectory optimization · SSM · Calibration",
-  },
-  {
-    index: "04",
-    title: "CV & systems",
-    items: "YOLO · OpenVINO · ONNX · OpenCV · Docker · MongoDB · Linux",
-  },
-];
-
-function ProjectVisual({
-  media,
-  title,
-  featuredVideo,
-  onOpenImage,
-  onOpenVideo,
+function FrameHeader({
+  center,
+  index,
+  inverse = false,
 }: {
-  media: ProjectMedia[];
-  title: string;
-  featuredVideo?: ProjectVideo;
-  onOpenImage: (media: ProjectMedia[], index: number) => void;
-  onOpenVideo: (video: ProjectVideo) => void;
+  center: string;
+  index: string;
+  inverse?: boolean;
 }) {
-  if (featuredVideo) {
-    return (
-      <button
-        className="project-visual project-video-poster"
-        type="button"
-        onClick={() => onOpenVideo(featuredVideo)}
-        aria-label={`Play ${featuredVideo.title}`}
-      >
-        <img
-          src={`https://i.ytimg.com/vi/${featuredVideo.id}/hqdefault.jpg`}
-          alt=""
-          loading="lazy"
-        />
-        <span className="video-play" aria-hidden="true">▶</span>
-        <span className="video-poster-label">PLAY CASE STUDY</span>
-        <span className="video-duration">{featuredVideo.duration}</span>
-      </button>
-    );
-  }
-
-  if (!media.length) {
-    return (
-      <div className="project-visual project-video-panel">
-        <span className="visual-label">VIDEO CASE STUDY / EXTERNAL</span>
-        <strong>{title}</strong>
-      </div>
-    );
-  }
   return (
-    <div className={`project-visual project-gallery gallery-${Math.min(media.length, 3)}`}>
-      {media.map((item, index) => (
-        <button
-          type="button"
-          key={item.src}
-          className={index === 0 ? "gallery-primary" : ""}
-          onClick={() => onOpenImage(media, index)}
-          aria-label={`Open image: ${item.alt}`}
-        >
-          <img src={item.src} alt={item.alt} loading="lazy" />
-          <span className="gallery-caption">{String(index + 1).padStart(2, "0")} / {item.alt}</span>
-          <span className="gallery-open" aria-hidden="true">EXPAND ↗</span>
-        </button>
-      ))}
+    <div className={`frame-header${inverse ? " is-inverse" : ""}`}>
+      <a href="#top">DM / ROBOTICS SOFTWARE ENGINEER</a>
+      <span>{center}</span>
+      <span>{index} / 07</span>
     </div>
   );
 }
 
-function ProjectVideos({
-  videos,
-  projectTitle,
-  onOpenVideo,
-}: {
-  videos: ProjectVideo[];
-  projectTitle: string;
-  onOpenVideo: (video: ProjectVideo) => void;
-}) {
-  if (!videos.length) {
-    return null;
-  }
+function ArrowIcon() {
+  return <span aria-hidden="true">↗</span>;
+}
 
+function MediaButton({
+  item,
+  collection,
+  index,
+  className = "",
+  onOpen,
+}: {
+  item: Media;
+  collection: Media[];
+  index: number;
+  className?: string;
+  onOpen: (media: Media[], index: number) => void;
+}) {
   return (
-    <div className="project-video-strip" aria-label={`${projectTitle} videos`}>
-      <div className="project-video-heading">
-        <span>PROJECT FOOTAGE</span>
-        <strong>{String(videos.length).padStart(2, "0")} CLIPS</strong>
-      </div>
-      <div className="project-video-grid">
-        {videos.map((video) => (
-          <button
-            className="project-video-card"
-            key={video.id}
-            type="button"
-            onClick={() => onOpenVideo(video)}
-            aria-label={`Play ${video.title}`}
-          >
-            <div className="project-video-frame">
-              <img
-                src={`https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`}
-                alt=""
-                loading="lazy"
-              />
-              <span className="video-play" aria-hidden="true">▶</span>
-            </div>
-            <div className="video-card-copy">
-              <span>{video.title}</span>
-              <strong>{video.duration} · PLAY ↗</strong>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
+    <button
+      className={`media-button ${className}`}
+      type="button"
+      onClick={() => onOpen(collection, index)}
+      aria-label={`Open image: ${item.alt}`}
+    >
+      <img src={item.src} alt={item.alt} loading="lazy" />
+      <span className="media-label">{item.label ?? item.alt}</span>
+      <span className="media-expand">EXPAND ↗</span>
+    </button>
   );
 }
 
 export default function Home() {
+  const [pipelineStage, setPipelineStage] = useState(0);
+  const [compare, setCompare] = useState(48);
   const [lightbox, setLightbox] = useState<
-    | { type: "image"; media: ProjectMedia[]; index: number }
-    | { type: "video"; video: ProjectVideo }
+    | { type: "image"; media: Media[]; index: number }
+    | { type: "video"; video: Video }
     | null
   >(null);
+  const pipelineRef = useRef<HTMLElement>(null);
+  const compareRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef(false);
 
   useEffect(() => {
-    const sections = document.querySelectorAll<HTMLElement>(".reveal");
-    const observer = new IntersectionObserver(
-      (entries) => entries.forEach((entry) => {
-        if (entry.isIntersecting) entry.target.classList.add("is-visible");
-      }),
-      { threshold: 0.12 }
-    );
-    sections.forEach((section) => observer.observe(section));
-    return () => observer.disconnect();
+    const updatePipeline = () => {
+      const section = pipelineRef.current;
+      if (!section) return;
+      const rect = section.getBoundingClientRect();
+      const travel = Math.max(section.offsetHeight - window.innerHeight, 1);
+      const progress = Math.min(1, Math.max(0, -rect.top / travel));
+      const next = Math.min(
+        pipelineStages.length - 1,
+        Math.floor(progress * pipelineStages.length)
+      );
+      setPipelineStage(next);
+      section.style.setProperty("--pipeline-progress", `${progress}`);
+    };
+    updatePipeline();
+    window.addEventListener("scroll", updatePipeline, { passive: true });
+    window.addEventListener("resize", updatePipeline);
+    return () => {
+      window.removeEventListener("scroll", updatePipeline);
+      window.removeEventListener("resize", updatePipeline);
+    };
   }, []);
 
   useEffect(() => {
     if (!lightbox) return;
-    const close = (event: KeyboardEvent) => {
+    const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setLightbox(null);
       if (lightbox.type === "image" && event.key === "ArrowRight") {
-        setLightbox({ ...lightbox, index: (lightbox.index + 1) % lightbox.media.length });
+        setLightbox({
+          ...lightbox,
+          index: (lightbox.index + 1) % lightbox.media.length,
+        });
       }
       if (lightbox.type === "image" && event.key === "ArrowLeft") {
         setLightbox({
           ...lightbox,
-          index: (lightbox.index - 1 + lightbox.media.length) % lightbox.media.length,
+          index:
+            (lightbox.index - 1 + lightbox.media.length) %
+            lightbox.media.length,
         });
       }
     };
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", close);
+    window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = "";
-      window.removeEventListener("keydown", close);
+      window.removeEventListener("keydown", onKey);
     };
   }, [lightbox]);
 
-  const openImage = (media: ProjectMedia[], index: number) =>
+  const updateCompare = (clientX: number) => {
+    const frame = compareRef.current;
+    if (!frame) return;
+    const bounds = frame.getBoundingClientRect();
+    const value = ((clientX - bounds.left) / bounds.width) * 100;
+    setCompare(Math.min(94, Math.max(6, value)));
+  };
+
+  const onComparePointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    dragRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateCompare(event.clientX);
+  };
+
+  const onComparePointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    if (dragRef.current) updateCompare(event.clientX);
+  };
+
+  const openImage = (media: Media[], index: number) =>
     setLightbox({ type: "image", media, index });
-  const openVideo = (video: ProjectVideo) =>
+
+  const openVideo = (video: Video) =>
     setLightbox({ type: "video", video });
 
+  const activePipeline = pipelineStages[pipelineStage];
+  const compareStyle = { "--compare": `${compare}%` } as CSSProperties;
+
   return (
-    <main>
-      <header className="site-header">
-        <a className="monogram" href="#top" aria-label="Dinmukhamet Murat, home">
+    <main id="top">
+      <header className="site-nav">
+        <a className="nav-brand" href="#top" aria-label="Dinmukhamet Murat, home">
           DM
         </a>
-
-        <nav className="desktop-nav" aria-label="Primary navigation">
+        <nav aria-label="Primary navigation">
+          <a href="#case">Case 01</a>
           <a href="#work">Work</a>
-          <a href="#about">About</a>
           <a href="#experience">Experience</a>
-          <a href="#contact">Contact</a>
+          <a className="nav-contact" href="#contact">
+            Let&apos;s talk <ArrowIcon />
+          </a>
         </nav>
-
-        <details className="mobile-menu">
-          <summary aria-label="Open navigation">Menu</summary>
-          <nav aria-label="Mobile navigation">
-            <a href="#work">Work</a>
-            <a href="#about">About</a>
-            <a href="#experience">Experience</a>
-            <a href="#contact">Contact</a>
-          </nav>
-        </details>
       </header>
 
-      <section className="hero" id="top" aria-labelledby="hero-title">
-        <div className="hero-copy">
-          <p className="eyebrow">
-            Robotics Software Engineer <span>·</span> Almaty, Kazakhstan
-          </p>
-
-          <h1 id="hero-title">
-            <span>I BUILD ROBOTS</span>
-            <span>THAT SEE, DECIDE,</span>
-            <span>AND MOVE PRECISELY.</span>
-          </h1>
-
-          <p className="hero-intro">
-            I work where geometry meets motion: 3D perception, scan-to-CAD
-            registration, and real-time control for industrial robots and
-            autonomous systems.
-          </p>
-
-          <div className="hero-actions">
-            <a className="button button-primary" href="#work">
-              View selected work <span aria-hidden="true">↗</span>
-            </a>
-            <a
-              className="button button-secondary"
-              href="/Dinmukhamet_Murat_Resume.pdf"
-              download
-            >
-              Download CV <span aria-hidden="true">↓</span>
-            </a>
-          </div>
-        </div>
-
-        <div className="hero-art">
-          <img
-            className="lab-image"
-            src="/images/robotics-lab.webp"
-            alt=""
-            aria-hidden="true"
-          />
-          <div className="art-vignette" aria-hidden="true" />
-          <img
-            className="portrait-image"
-            src="/images/dinmukhamet-sweater.webp"
-            alt="Dinmukhamet Murat, robotics software engineer"
-          />
-          <div className="hero-seam" aria-hidden="true" />
-          <div className="registration-mark" aria-hidden="true">
-            <i />
-          </div>
-          <p className="art-caption" aria-hidden="true">
-            HUMAN / MACHINE
-            <span>ALMATY · 43.2389° N</span>
-          </p>
-        </div>
-
-        <dl className="hero-metrics" aria-label="Selected engineering outcomes">
-          {metrics.map((metric) => (
-            <div className="metric" key={metric.label}>
-              <dt>{metric.label}</dt>
-              <dd>
-                <strong>{metric.value}</strong>
-                {metric.unit && <span>{metric.unit}</span>}
-              </dd>
-              <span className="metric-label" aria-hidden="true">
-                {metric.label}
-              </span>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <section className="industrial-reel" aria-label="Industrial robotics in production">
-        <div className="reel-copy">
-          <p className="section-kicker">FIELD / PRODUCTION FLOOR</p>
-          <strong>INDUSTRIAL ROBOTS. REAL STEEL. PRODUCTION CONSTRAINTS.</strong>
-        </div>
-        <div className="reel-track">
-          {[
-            ["/images/work/robot-welding.jpg", "ABB robotic welding cell"],
-            ["/images/work/me-gocator-calibration.jpg", "Scanner calibration on an ABB cell"],
-            ["/images/work/me-abb-pendant.jpg", "Programming an ABB industrial robot"],
-            ["/images/work/me-rotators.jpg", "Industrial robot cell and workpiece rotators"],
-            ["/images/work/welding-beam.jpg", "Robotic welding of a steel beam"],
-            ["/images/work/robot-welding-2.jpg", "ABB welding operation"],
-          ].map(([src, alt], index) => (
-            <button type="button" key={src} onClick={() => openImage([{ src, alt }], 0)}>
-              <img src={src} alt={alt} loading={index > 2 ? "lazy" : "eager"} />
-              <span>{String(index + 1).padStart(2, "0")} / {alt}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="section work-section reveal" id="work">
-        <div className="section-heading">
-          <p className="section-kicker">01 / SELECTED WORK</p>
-          <h2>
-            ROBOTS ARE ONLY USEFUL
-            <span>WHEN THEY WORK IN THE REAL WORLD.</span>
-          </h2>
-        </div>
-
-        <div className="project-list">
-          {projects.map((project) => {
-            const featuredVideo =
-              project.media.length === 0 ? project.videos?.[0] : undefined;
-            const supportingVideos = featuredVideo
-              ? project.videos?.slice(1) ?? []
-              : project.videos ?? [];
-
-            return (
-              <article className="project" key={project.number}>
-                <div className="project-number">{project.number}</div>
-                <div className="project-copy">
-                  <p className="project-eyebrow">{project.eyebrow}</p>
-                  <h3>{project.title}</h3>
-                  <p className="project-description">{project.description}</p>
-                  <ul className="tag-list" aria-label={`${project.title} tools`}>
-                    {project.tags.map((tag) => (
-                      <li key={tag}>{tag}</li>
-                    ))}
-                  </ul>
-                  <div className="project-links">
-                    {project.link && (
-                      <a href={project.link.href} target="_blank" rel="noreferrer">
-                        {project.link.label} ↗
-                      </a>
-                    )}
-                    {featuredVideo && (
-                      <a href={featuredVideo.href} target="_blank" rel="noreferrer">
-                        Open featured video ↗
-                      </a>
-                    )}
-                  </div>
-                </div>
-                <div className="project-result">
-                  <span>{project.resultLabel}</span>
-                  <strong>{project.result}</strong>
-                </div>
-                <ProjectVisual
-                  media={project.media}
-                  title={project.title}
-                  featuredVideo={featuredVideo}
-                  onOpenImage={openImage}
-                  onOpenVideo={openVideo}
-                />
-                <ProjectVideos
-                  videos={supportingVideos}
-                  projectTitle={project.title}
-                  onOpenVideo={openVideo}
-                />
-              </article>
-            );
-          })}
-        </div>
-
-        <div className="work-footer">
-          <p>
-            More code, experiments, and work-in-progress live on my GitLab.
-          </p>
-          <a
-            className="text-link"
-            href="https://gitlab.com/dinmukhamet.murat"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Explore GitLab <span aria-hidden="true">↗</span>
-          </a>
-        </div>
-      </section>
-
-      <section className="section about-section reveal" id="about">
-        <div className="about-intro">
-          <p className="section-kicker">02 / ABOUT</p>
-          <h2>
-            I TURN MESSY PHYSICAL PROBLEMS INTO{" "}
-            <span>RELIABLE ROBOT BEHAVIOR.</span>
-          </h2>
-        </div>
-
-        <div className="about-body">
-          <p className="about-lead">
-            My work sits between 3D perception, control, and the production
-            floor.
-          </p>
-          <div className="about-copy">
-            <p>
-              At Quant Robotics, I build the software that lets industrial
-              robots scan steel parts, understand where they are, plan the next
-              move, and assemble them with sub-millimetre precision.
-            </p>
-            <p>
-              I care about the gap between a good demo and a system operators
-              can trust: calibration, edge cases, cycle time, clear failure
-              modes, and maintainable code.
-            </p>
-          </div>
-        </div>
-
-        <div className="lab-projects">
-          <p className="lab-title">IN THE LAB</p>
-          <article>
-            <span>01</span>
-            <div>
-              <h3>virtual-pointcloud-scanner</h3>
-              <p>
-                Industrial laser-scanner simulation from 36 viewpoints using
-                Open3D raycasting, occlusion, and a pinhole camera model.
-              </p>
-            </div>
-            <strong>Open3D / Python</strong>
-          </article>
-          <article>
-            <span>02</span>
-            <div>
-              <h3>ROS MoveIt pick-and-place</h3>
-              <p>
-                A UR-5 arranges conveyor boxes into target shapes with ROS 2
-                Jazzy and MoveIt2. Currently in development.
-              </p>
-            </div>
-            <strong>ROS 2 / MoveIt2</strong>
-          </article>
-        </div>
-      </section>
-
-      <section className="section experience-section reveal" id="experience">
-        <div className="section-heading experience-heading">
-          <p className="section-kicker">03 / EXPERIENCE</p>
-          <h2>BUILDING FROM RESEARCH TO PRODUCTION.</h2>
-        </div>
-
-        <div className="experience-list">
-          {experience.map((item) => (
-            <article key={`${item.company}-${item.period}`}>
-              <p className="experience-period">{item.period}</p>
-              <div>
-                <h3>{item.company}</h3>
-                <p className="experience-role">{item.role}</p>
-              </div>
-              <p className="experience-summary">{item.summary}</p>
-            </article>
-          ))}
-        </div>
-
-        <div className="education">
-          <p className="section-kicker">EDUCATION</p>
+      <section className="hero-section" aria-labelledby="hero-title">
+        <FrameHeader center="SELECTED WORK / 2024–26" index="01" />
+        <div className="hero-intro-grid">
           <div>
-            <h3>B.S. ROBOTICS ENGINEERING</h3>
-            <p>Nazarbayev University · Astana, Kazakhstan · 2025</p>
+            <p className="signal-label">DINMUKHAMET MURAT / ASTANA, KAZAKHSTAN</p>
+            <h1 id="hero-title">
+              Machines are precise.
+              <span>The world isn&apos;t.</span>
+            </h1>
+          </div>
+          <div className="hero-positioning">
+            <p>
+              I build perception, planning and control systems that keep
+              working when scans, steel and environments aren&apos;t perfect.
+            </p>
+            <a href="#contact">
+              OPEN TO ROBOTICS SOFTWARE / PERCEPTION ROLES
+            </a>
+          </div>
+        </div>
+
+        <div className="hero-stage">
+          <div className="hero-photo" aria-label="Dinmukhamet at an ABB robotic cell">
+            <div className="hero-slice slice-a">
+              <img
+                src="/images/work/me-abb-pendant.jpg"
+                alt="Dinmukhamet Murat holding an ABB teach pendant in a production cell"
+              />
+            </div>
+            <div className="hero-slice slice-b" aria-hidden="true">
+              <img src="/images/work/me-abb-pendant.jpg" alt="" />
+            </div>
+            <div className="hero-slice slice-c" aria-hidden="true">
+              <img src="/images/work/me-abb-pendant.jpg" alt="" />
+            </div>
+            <span className="hero-photo-caption">
+              PRODUCTION FLOOR / ABB CELL / REAL HARDWARE
+            </span>
+          </div>
+          <div className="hero-measure">
+            <img
+              src="/images/work/fit-inspection.png"
+              alt="Fit inspection result showing measured geometry"
+            />
+            <div>
+              <p>SELECTED PRODUCTION RESULT</p>
+              <strong>
+                3 mm <span>→</span> &lt;1
+              </strong>
+              <p>ABB PLACEMENT ERROR</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="hero-footer">
+          <a href="#case">SCROLL TO ENTER THE SCAN-TO-CAD PIPELINE ↓</a>
+          <a href="/Dinmukhamet_Murat_Resume.pdf" download>
+            VIEW CV ↗
+          </a>
+        </div>
+      </section>
+
+      <section
+        className="pipeline-section"
+        id="case"
+        ref={pipelineRef}
+        aria-labelledby="pipeline-title"
+      >
+        <div className="pipeline-sticky">
+          <FrameHeader
+            center="CASE 01 / SCAN-TO-CAD"
+            index="02"
+            inverse
+          />
+          <div className="pipeline-layout">
+            <div className="pipeline-copy">
+              <p className="signal-label">PRODUCTION PERCEPTION / QUANT ROBOTICS</p>
+              <h2 id="pipeline-title">
+                From noisy scan to robot-ready geometry.
+              </h2>
+              <div className="pipeline-active-copy" aria-live="polite">
+                <p>{activePipeline.eyebrow}</p>
+                <h3>{activePipeline.title}</h3>
+                <p>{activePipeline.body}</p>
+              </div>
+              <ol className="pipeline-nav" aria-label="Scan-to-CAD stages">
+                {pipelineStages.map((stage, index) => (
+                  <li key={stage.short}>
+                    <button
+                      type="button"
+                      className={index === pipelineStage ? "is-active" : ""}
+                      onClick={() => {
+                        setPipelineStage(index);
+                        pipelineRef.current?.scrollIntoView({
+                          block: "start",
+                          behavior: "smooth",
+                        });
+                      }}
+                      aria-current={index === pipelineStage ? "step" : undefined}
+                    >
+                      <span>{stage.index}</span>
+                      {stage.short}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="pipeline-visual">
+              <div
+                className="compare-frame"
+                ref={compareRef}
+                style={compareStyle}
+                onPointerDown={onComparePointerDown}
+                onPointerMove={onComparePointerMove}
+                onPointerUp={() => {
+                  dragRef.current = false;
+                }}
+                onPointerCancel={() => {
+                  dragRef.current = false;
+                }}
+                role="group"
+                aria-label="Before and after scan registration comparison"
+              >
+                <img
+                  className="compare-before"
+                  src="/images/work/pointcloud-unaligned-beam.jpg"
+                  alt="Raw measured scan before registration"
+                />
+                <div className="compare-after">
+                  <img
+                    src="/images/work/scan-to-cad-beam-match.png"
+                    alt="Registered scan aligned to the CAD model"
+                  />
+                </div>
+                <span className="compare-label before-label">RAW MEASURED SCAN</span>
+                <span className="compare-label after-label">REGISTERED MODEL</span>
+                <div className="compare-handle" aria-hidden="true">
+                  <span>↔</span>
+                </div>
+                <input
+                  className="compare-range"
+                  type="range"
+                  min="6"
+                  max="94"
+                  value={compare}
+                  onChange={(event) => setCompare(Number(event.target.value))}
+                  aria-label="Compare raw scan and registered result"
+                />
+              </div>
+              <div className="pipeline-filmstrip" aria-live="polite">
+                {pipelineStages.map((stage, index) => (
+                  <button
+                    type="button"
+                    key={stage.short}
+                    className={index === pipelineStage ? "is-active" : ""}
+                    onClick={() => setPipelineStage(index)}
+                    aria-label={`Show ${stage.short} stage`}
+                  >
+                    <img src={stage.image} alt="" />
+                  </button>
+                ))}
+              </div>
+              <div className="pipeline-progress">
+                <span>DRAG / SCROLL TO ALIGN</span>
+                <span>PIPELINE STAGE {activePipeline.index} / 05</span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="section skills-section reveal" aria-labelledby="skills-title">
-        <div className="skills-heading">
-          <p className="section-kicker">04 / TOOLKIT</p>
-          <h2 id="skills-title">THE STACK BEHIND THE MOTION.</h2>
+      <section className="result-section" aria-labelledby="result-title">
+        <FrameHeader center="CASE 01 / RESULT" index="03" />
+        <div className="result-statement">
+          <p className="signal-label">WHAT CHANGED IN PRODUCTION</p>
+          <h2 id="result-title" aria-label="Placement error reduced from 3 millimetres to below 1 millimetre">
+            <span className="result-old">3<small>mm</small></span>
+            <span className="result-arrow">→</span>
+            <span>&lt;1<small>mm</small></span>
+          </h2>
+          <div>
+            <p>
+              Placement error reduced by rebuilding the registration and
+              inspection pipeline.
+            </p>
+            <span>OPEN3D / STAGED ICP / RAYCASTING / ABB RAPID</span>
+          </div>
         </div>
-
-        <div className="skills-grid">
-          {skillGroups.map((group) => (
-            <article key={group.index}>
-              <span>{group.index}</span>
-              <h3>{group.title}</h3>
-              <p>{group.items}</p>
-            </article>
-          ))}
+        <div className="result-media">
+          <button
+            type="button"
+            onClick={() =>
+              openImage(
+                [
+                  {
+                    src: "/images/work/fit-inspection.png",
+                    alt: "Fit inspection of measured geometry",
+                  },
+                  {
+                    src: "/images/work/me-gocator-calibration.jpg",
+                    alt: "Dinmukhamet calibrating the Gocator scanner",
+                  },
+                ],
+                0
+              )
+            }
+          >
+            <img
+              src="/images/work/fit-inspection.png"
+              alt="Fit inspection of measured geometry"
+            />
+            <span>FIT INSPECTION / MEASURED GEOMETRY</span>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              openImage(
+                [
+                  {
+                    src: "/images/work/fit-inspection.png",
+                    alt: "Fit inspection of measured geometry",
+                  },
+                  {
+                    src: "/images/work/me-gocator-calibration.jpg",
+                    alt: "Dinmukhamet calibrating the Gocator scanner",
+                  },
+                ],
+                1
+              )
+            }
+          >
+            <img
+              src="/images/work/me-gocator-calibration.jpg"
+              alt="Dinmukhamet calibrating a Gocator scanner in the ABB cell"
+            />
+            <span>CALIBRATING THE REAL CELL</span>
+          </button>
+        </div>
+        <div className="section-footnote">
+          <span>THE PROOF IS THE SYSTEM, NOT THE ANIMATION.</span>
+          <a href="#capabilities">NEXT: WHAT I BRING TO A TEAM ↓</a>
         </div>
       </section>
 
-      <section className="contact-section reveal" id="contact">
-        <p className="section-kicker">05 / CONTACT</p>
-        <h2>
-          LET&apos;S BUILD ROBOTS
-          <span>THAT WORK OUTSIDE THE DEMO.</span>
-        </h2>
+      <section
+        className="capabilities-section"
+        id="capabilities"
+        aria-labelledby="capabilities-title"
+      >
+        <FrameHeader center="CAPABILITY / CONNECTED SYSTEMS" index="04" />
+        <div className="capabilities-heading">
+          <div>
+            <p className="signal-label">WHAT I BRING TO A ROBOTICS TEAM</p>
+            <h2 id="capabilities-title">
+              Perception.
+              <span>Planning.</span>
+              <span>Control.</span>
+            </h2>
+          </div>
+          <p>
+            Not three disconnected skill lists. One engineering loop—from
+            imperfect sensor input to precise robot motion.
+          </p>
+        </div>
+        <div className="capability-grid">
+          <article>
+            <p>01 / SEE</p>
+            <h3>3D perception</h3>
+            <ul>
+              <li>Scan registration</li>
+              <li>Part identification</li>
+              <li>Fit inspection</li>
+            </ul>
+            <img
+              src="/images/work/scan-to-cad-beam-match.png"
+              alt="Registered point cloud and CAD geometry"
+            />
+          </article>
+          <article>
+            <p>02 / DECIDE</p>
+            <h3>Planning</h3>
+            <ul>
+              <li>Assembly sequencing</li>
+              <li>Collision-safe motion</li>
+              <li>Robot handoff</li>
+            </ul>
+            <img
+              src="/images/work/assembly-visualizer.png"
+              alt="Geometry-aware robotic assembly plan"
+            />
+          </article>
+          <article>
+            <p>03 / MOVE</p>
+            <h3>Control</h3>
+            <ul>
+              <li>NMPC / Nav2</li>
+              <li>ABB RAPID</li>
+              <li>Real-time constraints</li>
+            </ul>
+            <img
+              src="/images/work/robot-welding-2.jpg"
+              alt="ABB robot executing a welding operation"
+            />
+          </article>
+        </div>
+        <div className="capability-footer">
+          <span>OPEN3D · ROS 2 · MOVEIT2 · ACADOS · ABB RAPID</span>
+          <a href="#work">EXPLORE SELECTED WORK ↓</a>
+        </div>
+      </section>
 
-        <div className="contact-row">
-          <a href="mailto:dinmukhamet.murat@gmail.com">
-            dinmukhamet.murat@gmail.com <span aria-hidden="true">↗</span>
-          </a>
-          <div className="social-links">
+      <section className="work-section" id="work" aria-labelledby="work-title">
+        <FrameHeader center="SELECTED WORK / RANGE" index="05" inverse />
+        <div className="work-heading">
+          <p className="signal-label">BEYOND THE FLAGSHIP CASE</p>
+          <h2 id="work-title">
+            Systems that sense, decide and move.
+          </h2>
+          <p>
+            Production robotics, motion control, synthetic perception and
+            edge inference—shown through real artifacts, not technology logos.
+          </p>
+        </div>
+
+        <article className="work-feature work-feature-light">
+          <div className="work-index">02</div>
+          <div className="work-copy">
+            <p>QUANT ROBOTICS / PRODUCTION AUTOMATION</p>
+            <h3>Assembly planning for ABB welding cells.</h3>
+            <p>
+              Geometry-aware install-and-weld planning, collision-safe retreat
+              trajectories and a robot-to-robot production handoff.
+            </p>
+            <dl>
+              <div>
+                <dt>Planning cycle</dt>
+                <dd>160 → 30–55 s</dd>
+              </div>
+              <div>
+                <dt>Stack</dt>
+                <dd>ROS 2 · MoveIt2 · RAPID</dd>
+              </div>
+            </dl>
+          </div>
+          <div className="work-collage assembly-collage">
+            {projectMedia.assembly.map((item, index) => (
+              <MediaButton
+                key={item.src}
+                item={item}
+                collection={projectMedia.assembly}
+                index={index}
+                className={`collage-${index + 1}`}
+                onOpen={openImage}
+              />
+            ))}
+          </div>
+        </article>
+
+        <article className="work-feature nmpc-feature">
+          <div className="work-index">03</div>
+          <div className="work-copy">
+            <p>NAZARBAYEV UNIVERSITY / MOTION CONTROL</p>
+            <h3>Human-aware NMPC for a mobile robot.</h3>
+            <p>
+              A custom nonlinear MPC controller for Nav2 with skid-steer
+              dynamics and human-aware speed adaptation driven by RGB-D
+              perception.
+            </p>
+            <div className="nmpc-metric">
+              <strong>50–70</strong>
+              <span>ms optimization cycle</span>
+            </div>
+            <p className="work-stack">
+              ACADOS · NAV2 · ROS 2 · YOLOV8 · GAZEBO
+            </p>
+          </div>
+          <div className="video-deck">
+            {videos.map((video, index) => (
+              <button
+                type="button"
+                key={video.id}
+                className={`video-card video-card-${index + 1}`}
+                onClick={() => openVideo(video)}
+              >
+                <img
+                  src={`https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`}
+                  alt=""
+                  loading="lazy"
+                />
+                <span className="video-play">PLAY</span>
+                <span>
+                  {video.title}
+                  <small>{video.duration}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <div className="work-pair">
+          <article>
+            <div className="work-index">04</div>
+            <p>OPEN SOURCE / SYNTHETIC PERCEPTION</p>
+            <h3>Virtual point-cloud scanner.</h3>
+            <p>
+              An industrial scanner simulator that captures STL models from 36
+              viewpoints with visibility and occlusion intact.
+            </p>
+            <MediaButton
+              item={projectMedia.scanner[0]}
+              collection={projectMedia.scanner}
+              index={0}
+              onOpen={openImage}
+            />
             <a
-              href="https://www.linkedin.com/in/muratdinmukhamet/"
+              href="https://github.com/dinmukhamet-murat/virtual-pointcloud-scanner"
               target="_blank"
               rel="noreferrer"
             >
-              LinkedIn
+              VIEW REPOSITORY <ArrowIcon />
             </a>
+          </article>
+          <article>
+            <div className="work-index">05</div>
+            <p>EDGE CV / EXPERIMENTS</p>
+            <h3>Inference built for limited compute.</h3>
+            <p>
+              Practical optimization across ONNX and OpenVINO, plus a wider
+              archive of ROS 2 navigation and manipulation experiments.
+            </p>
+            <MediaButton
+              item={projectMedia.edge[0]}
+              collection={projectMedia.edge}
+              index={0}
+              onOpen={openImage}
+            />
             <a
               href="https://gitlab.com/dinmukhamet.murat"
               target="_blank"
               rel="noreferrer"
             >
-              GitLab
+              EXPLORE ENGINEERING ARCHIVE <ArrowIcon />
             </a>
-            <a href="tel:+77066500639">+7 706 650 0639</a>
+          </article>
+        </div>
+      </section>
+
+      <section
+        className="experience-section"
+        id="experience"
+        aria-labelledby="experience-title"
+      >
+        <FrameHeader center="EXPERIENCE / EDUCATION" index="06" />
+        <div className="experience-heading">
+          <p className="signal-label">FROM RESEARCH TO PRODUCTION</p>
+          <h2 id="experience-title">Built in the lab. Proven on the floor.</h2>
+        </div>
+        <div className="experience-list">
+          {experience.map((item, index) => (
+            <article key={`${item.company}-${item.period}`}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <p>{item.period}</p>
+              <div>
+                <h3>{item.company}</h3>
+                <p>{item.role}</p>
+              </div>
+              <p>{item.detail}</p>
+            </article>
+          ))}
+        </div>
+        <div className="education-row">
+          <p>EDUCATION</p>
+          <div>
+            <h3>B.Sc. Robotics Engineering</h3>
+            <p>Nazarbayev University · Astana · 2025</p>
+          </div>
+          <p>
+            Control Systems · Machine Learning · PLC Programming · Industrial
+            Automation
+          </p>
+        </div>
+      </section>
+
+      <section className="contact-section" id="contact" aria-labelledby="contact-title">
+        <FrameHeader center="CONTACT / AVAILABILITY" index="07" inverse />
+        <div className="contact-layout">
+          <div className="contact-image">
+            <img
+              src="/images/work/welding-beam.jpg"
+              alt="ABB robot welding steel in a production cell"
+            />
+            <span>PRODUCTION ROBOTICS / REAL HARDWARE</span>
+          </div>
+          <div className="contact-copy">
+            <p className="signal-label">
+              AVAILABLE FOR THE NEXT SYSTEM THAT HAS TO WORK
+            </p>
+            <h2 id="contact-title">Need robotics beyond the demo?</h2>
+            <p className="contact-roles">
+              Robotics Software · 3D Perception
+              <br />
+              Motion Planning · Control
+            </p>
+            <div className="availability">
+              <span>ASTANA, KAZAKHSTAN</span>
+              <span>OPEN TO RELOCATION WITH VISA SPONSORSHIP</span>
+            </div>
+            <a
+              className="talk-link"
+              href="mailto:dinmukhamet.murat@gmail.com"
+            >
+              Let&apos;s talk <ArrowIcon />
+            </a>
+            <div className="contact-links">
+              <a href="mailto:dinmukhamet.murat@gmail.com">EMAIL</a>
+              <a
+                href="https://www.linkedin.com/in/muratdinmukhamet/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                LINKEDIN
+              </a>
+              <a href="/Dinmukhamet_Murat_Resume.pdf" download>
+                DOWNLOAD CV
+              </a>
+            </div>
           </div>
         </div>
-
         <footer>
-          <p>© 2026 Dinmukhamet Murat</p>
-          <a href="#top">Back to top ↑</a>
+          <span>DINMUKHAMET MURAT © 2026</span>
+          <span>BUILT FROM REAL WORK, NOT STOCK IMAGERY.</span>
         </footer>
       </section>
 
@@ -707,7 +853,7 @@ export default function Home() {
           role="dialog"
           aria-modal="true"
           aria-label={lightbox.type === "image" ? "Image viewer" : "Video player"}
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
             if (event.target === event.currentTarget) setLightbox(null);
           }}
         >

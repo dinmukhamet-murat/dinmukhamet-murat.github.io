@@ -1,5 +1,5 @@
 {
-  "name": "dinmukhamet-portfolio",
+  "name": "dinmukhamet-industrial-editorial-portfolio",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -13,7 +13,6 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "@fontsource/anton": "5.2.7",
     "@fontsource/inter": "5.2.8",
     "react": "19.2.6",
     "react-dom": "19.2.6"
